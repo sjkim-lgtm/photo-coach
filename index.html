@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1" />
+<meta name="theme-color" content="#12100f" />
+<title>찍어줄게 · 사진 코치</title>
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="apple-touch-icon" href="icon.svg" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="찍어줄게" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">◉</span>
+      <span class="brandname">찍어줄게</span>
+    </div>
+    <button class="iconbtn" id="btnHelp" title="도움말">?</button>
+  </header>
+
+  <main id="view"></main>
+
+  <nav class="tabbar">
+    <button data-tab="home" class="tab on"><span>⌂</span>홈</button>
+    <button data-tab="shoot" class="tab"><span>◎</span>촬영</button>
+    <button data-tab="edit" class="tab"><span>✧</span>보정</button>
+    <button data-tab="notify" class="tab"><span>◔</span>알림</button>
+    <button data-tab="saved" class="tab"><span>♡</span>보관함</button>
+  </nav>
+</div>
+
+<!-- 시트(모달) -->
+<div id="sheet" class="sheet" hidden>
+  <div class="sheet-bg" data-close></div>
+  <div class="sheet-body">
+    <button class="sheet-close" data-close>✕</button>
+    <div id="sheetContent"></div>
+  </div>
+</div>
+
+<div id="toast" class="toast" hidden></div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
