@@ -300,6 +300,21 @@ h2.sec:first-child{margin-top:6px}
   background:rgba(0,0,0,.72); color:#fff; padding:18px; border-radius:14px; font-size:14px; line-height:1.6;
 }
 
+/* ---- 카메라: 비율 틀·카테고리 ---- */
+.cam-mask{position:absolute; background:rgba(0,0,0,.62); pointer-events:none; z-index:1}
+.cam-ghost{z-index:2}
+.cam-top,.cam-bottom,.cam-cats,.cam-ghosttog,.cam-ai-btn,.cam-ai,.cam-hint,.cam-msg,.cam-level{z-index:3}
+.cam-cats{
+  position:absolute; left:0; right:0; bottom:calc(118px + env(safe-area-inset-bottom,0px));
+  display:flex; gap:6px; justify-content:center; padding:0 12px;
+}
+.cam-cats button{
+  padding:7px 13px; border-radius:99px; background:rgba(0,0,0,.5); color:rgba(255,255,255,.75); font-size:12.5px;
+}
+.cam-cats button.on{background:var(--pt); color:#2a1a18; font-weight:700}
+.cam-cats button.ratio{background:rgba(230,197,138,.25); color:var(--gold); font-weight:700}
+.cam-chips{color:var(--gold); font-size:12px}
+
 /* ---- 카메라: 수평계·힌트·AI ---- */
 .cam-level{
   position:absolute; top:50%; left:50%; width:110px; height:0; pointer-events:none;

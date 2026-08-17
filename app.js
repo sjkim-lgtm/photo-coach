@@ -31,11 +31,30 @@ const MEMCACHE = {};
 function memDB() {
   return new Promise((res, rej) => {
     if (_db) return res(_db);
-    const rq = indexedDB.open('jjik-mem', 1);
-    rq.onupgradeneeded = () => { rq.result.createObjectStore('mem', { keyPath: 'id', autoIncrement: true }); };
+    const rq = indexedDB.open('jjik-mem', 2);
+    rq.onupgradeneeded = () => {
+      const db = rq.result;
+      if (!db.objectStoreNames.contains('mem')) db.createObjectStore('mem', { keyPath: 'id', autoIncrement: true });
+      if (!db.objectStoreNames.contains('exam')) db.createObjectStore('exam', { keyPath: 'id' });
+    };
     rq.onsuccess = () => { _db = rq.result; res(_db); };
     rq.onerror = () => rej(rq.error);
   });
+}
+/* 구도별 AI 예시 사진 저장 (한 번 만들면 계속 재사용) */
+function examGet(id) {
+  return memDB().then((db) => new Promise((res) => {
+    const r = db.transaction('exam').objectStore('exam').get(id);
+    r.onsuccess = () => res(r.result || null);
+    r.onerror = () => res(null);
+  })).catch(() => null);
+}
+function examPut(id, blob) {
+  return memDB().then((db) => new Promise((res, rej) => {
+    const tx = db.transaction('exam', 'readwrite');
+    tx.objectStore('exam').put({ id, blob });
+    tx.oncomplete = res; tx.onerror = () => rej(tx.error);
+  }));
 }
 function memAdd(rec) {
   return memDB().then((db) => new Promise((res, rej) => {
@@ -569,6 +588,7 @@ function openCompo(id) {
     <h3>${esc(c.name)}</h3>
     <div class="tagline" style="margin-bottom:14px">${esc(c.tagline)}</div>
     <div style="max-width:190px;margin:0 auto 14px" class="guide">${guideSVG(c.guide, true)}</div>
+    <div id="examBox"></div>
     <div class="card tight"><div class="card-s">${esc(c.why)}</div></div>
     <div class="kv" style="margin:12px 0">
       <span>카메라 높이 · ${esc(c.camera.height)}</span><span>거리 · ${esc(c.camera.dist)}</span>
@@ -586,6 +606,58 @@ function openCompo(id) {
       <button class="btn ghost" data-act="doneShoot">찍었어요 ✓</button>
     </div>`;
   sheet(html);
+  fillExamBox(c);
+}
+/* 구도 상세의 예시 사진 영역: 만들어둔 게 있으면 보여주고, 없으면 만들기 버튼 */
+const EXAM_BUSY = {};
+function fillExamBox(c) {
+  const box = $('#examBox'); if (!box) return;
+  if (EXAM_BUSY[c.id]) { box.innerHTML = `<div class="card tight" style="margin-bottom:12px"><div class="card-s">✨ 예시 사진을 만드는 중… (10~20초)</div></div>`; return; }
+  examGet(c.id).then((rec) => {
+    if (!$('#examBox') || EXAM_BUSY[c.id]) return;
+    if (rec && rec.blob) {
+      box.innerHTML = `<img src="${URL.createObjectURL(rec.blob)}" alt="예시" style="width:100%;border-radius:14px;margin-bottom:12px">
+        <div class="small" style="margin:-6px 0 12px;text-align:center">AI가 만든 예시예요 (실존 인물 아님)</div>`;
+    } else {
+      box.innerHTML = `<div class="rowbtns" style="margin-bottom:12px">
+        <button class="btn" data-act="examGen" data-id="${c.id}">✨ 실사 예시 사진 만들기 <span class="pro">PRO</span></button>
+      </div>`;
+    }
+  });
+}
+function runExamGen(key, id) {
+  const c = COMPOSITIONS.find((x) => x.id === id); if (!c) return;
+  EXAM_BUSY[id] = true;
+  if (!$('#examBox')) openCompo(id); // 열쇠 입력 뒤에는 구도 화면으로 되돌아와서 진행
+  const box = $('#examBox');
+  if (box) box.innerHTML = `<div class="card tight" style="margin-bottom:12px"><div class="card-s">✨ 예시 사진을 만드는 중… (10~20초, 한 번 만들면 계속 무료로 보여요)</div></div>`;
+  const who = c.mode === 'duo' ? 'a young Korean couple in their 20s' : 'a young Korean woman in her 20s, casual stylish outfit';
+  const prompt = 'Generate ONE photorealistic vertical 4:5 photograph for a photography tutorial app. Subject: ' + who + ', photographed candidly by a partner with a smartphone. The photo must clearly DEMONSTRATE this composition technique: "' + c.name + ' — ' + c.tagline + '". Technique details: ' + c.why + ' Camera: ' + c.camera.height + ' height, ' + c.camera.zoom + '. Style: natural light, instagram aesthetic, realistic smartphone photo quality, no text, no watermark. Fictional person, not a real individual.';
+  const body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] });
+  const models = ['gemini-2.5-flash-image', 'gemini-2.5-flash-image-preview'];
+  const tryModel = (i) => {
+    if (i >= models.length) {
+      EXAM_BUSY[id] = false;
+      if ($('#examBox')) $('#examBox').innerHTML = `<div class="card tight" style="margin-bottom:12px"><div class="card-s">지금은 만들 수 없어요. 잠시 후 다시 시도해주세요.</div>
+        <div class="rowbtns"><button class="btn ghost sm" data-act="examGen" data-id="${id}">다시 시도</button></div></div>`;
+      return;
+    }
+    fetch('https://generativelanguage.googleapis.com/v1beta/models/' + models[i] + ':generateContent?key=' + encodeURIComponent(key), {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body,
+    }).then((r) => { if (!r.ok) throw 0; return r.json(); }).then((j) => {
+      const parts = j && j.candidates && j.candidates[0] && j.candidates[0].content.parts || [];
+      const ip = parts.find((p) => p.inline_data || p.inlineData);
+      if (!ip) throw 0;
+      const d = ip.inline_data || ip.inlineData;
+      const bin = atob(d.data);
+      const arr = new Uint8Array(bin.length);
+      for (let k = 0; k < bin.length; k++) arr[k] = bin.charCodeAt(k);
+      const blob = new Blob([arr], { type: d.mime_type || d.mimeType || 'image/png' });
+      EXAM_BUSY[id] = false;
+      examPut(id, blob).then(() => fillExamBox(c));
+    }).catch(() => tryModel(i + 1));
+  };
+  tryModel(0);
 }
 function sheet(html) {
   $('#sheetContent').innerHTML = html;
@@ -595,15 +667,27 @@ function sheet(html) {
 function closeSheet() { $('#sheet').hidden = true; document.body.style.overflow = ''; }
 
 /* ================= 카메라 (구도 겹쳐 보며 찍기) ================= */
-const CAM = { stream: null, list: [], idx: 0, ghost: true, hintTimer: null, motionFn: null };
+const CAM = {
+  stream: null, list: [], idx: 0, ghost: true, hintTimer: null, motionFn: null,
+  cat: 'compo', poseIdx: 0, sayIdx: 0, purposeId: null,
+};
+function sayLines() {
+  const out = [];
+  SCRIPTS.forEach((g) => g.lines.forEach((l) => out.push({ g: g.g, l })));
+  return out;
+}
 function openCamera(id) {
   closeSheet();
   CAM.list = COMPOSITIONS.filter((c) => c.mode === S.mode || c.mode === 'both');
   CAM.idx = Math.max(0, CAM.list.findIndex((c) => c.id === id));
+  CAM.cat = 'compo'; CAM.poseIdx = 0; CAM.sayIdx = 0;
+  CAM.purposeId = CAM.purposeId || S.lastPurpose;
   const el = document.createElement('div');
   el.id = 'cam';
   el.innerHTML = `
     <video id="camVideo" autoplay playsinline muted></video>
+    <div class="cam-mask" id="maskT"></div><div class="cam-mask" id="maskB"></div>
+    <div class="cam-mask" id="maskL"></div><div class="cam-mask" id="maskR"></div>
     <div class="cam-ghost" id="camGhost"></div>
     <div class="cam-top">
       <div><div class="cam-name" id="camName"></div><div class="cam-say" id="camSay"></div></div>
@@ -614,6 +698,13 @@ function openCamera(id) {
     <div class="cam-msg" id="camMsg" hidden></div>
     <div class="cam-ai" id="camAi" hidden></div>
     <button class="cam-ai-btn" data-cam="ai">✨ AI 코치 <span class="pro">PRO</span></button>
+    <div class="cam-cats">
+      <button data-cam="cat" data-cat="compo" class="on">구도</button>
+      <button data-cam="cat" data-cat="angle">각도</button>
+      <button data-cam="cat" data-cat="pose">포즈</button>
+      <button data-cam="cat" data-cat="say">대사</button>
+      <button data-cam="ratio" id="camRatio" class="ratio"></button>
+    </div>
     <div class="cam-bottom">
       <button class="cam-side" data-cam="prev">‹ 이전</button>
       <button class="cam-shutter" data-cam="shot" aria-label="촬영"></button>
@@ -622,8 +713,10 @@ function openCamera(id) {
     <button class="cam-ghosttog" data-cam="ghost">가이드 끄기</button>`;
   document.body.appendChild(el);
   document.body.style.overflow = 'hidden';
-  camShow();
+  camShow(); camLayout();
   const video = $('#camVideo');
+  video.addEventListener('loadedmetadata', camLayout);
+  window.addEventListener('resize', camLayout);
   const constraints = { video: { facingMode: 'environment', width: { ideal: 1920 }, height: { ideal: 1080 } }, audio: false };
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
     camFail('이 화면에서는 카메라를 못 열어요. 휴대폰에서 주소가 https로 시작해야 카메라가 열립니다.');
@@ -639,6 +732,26 @@ function openCamera(id) {
   camLevelStart();
 }
 function camFail(msg) { const m = $('#camMsg'); if (m) { m.hidden = false; m.textContent = msg; } }
+
+/* 선택한 용도(피드 4:5, 스토리 9:16…)에 맞는 촬영 틀 표시 */
+function camLayout() {
+  const el = $('#cam'); if (!el) return;
+  const p = purposeOf(CAM.purposeId);
+  const r = p.ratio[0] / p.ratio[1];
+  const cw = el.clientWidth, ch = el.clientHeight;
+  let w = cw, h = cw / r;
+  if (h > ch) { h = ch; w = ch * r; }
+  const mx = (cw - w) / 2, my = (ch - h) / 2;
+  const set = (id, css) => { const m = $(id); if (m) Object.assign(m.style, css); };
+  set('#maskT', { top: 0, left: 0, right: 0, height: my + 'px', bottom: 'auto', width: 'auto' });
+  set('#maskB', { bottom: 0, left: 0, right: 0, height: my + 'px', top: 'auto', width: 'auto' });
+  set('#maskL', { top: my + 'px', bottom: my + 'px', left: 0, width: mx + 'px', height: 'auto', right: 'auto' });
+  set('#maskR', { top: my + 'px', bottom: my + 'px', right: 0, width: mx + 'px', height: 'auto', left: 'auto' });
+  const g = $('#camGhost');
+  if (g) Object.assign(g.style, { top: my + 'px', bottom: my + 'px', left: mx + 'px', right: mx + 'px' });
+  const rb = $('#camRatio');
+  if (rb) rb.textContent = p.ratio[0] + ':' + (p.ratio[1] % 1 ? p.ratio[1] : p.ratio[1]) + ' ' + p.short;
+}
 
 /* --- 무료 스마트 점검: 수평계 + 밝기·역광 경고 (기기 안에서만 계산) --- */
 function camLevelStart() {
@@ -832,32 +945,84 @@ function runAICoach(key) {
 }
 function camShow() {
   const c = CAM.list[CAM.idx];
-  $('#camName').textContent = c.name;
+  const nameEl = $('#camName'), sayEl = $('#camSay');
   const rec = S.place && PLACE_REC[S.place];
-  const p = S.place && SITUATIONS.find((x) => x.id === S.place);
-  $('#camSay').innerHTML = '“' + esc(c.say) + '”' + (rec && p ? `<br><span class="cam-place">📍 ${esc(p.name)} · ${esc(rec.pose)}</span>` : '');
+  const pl = S.place && SITUATIONS.find((x) => x.id === S.place);
+  const placeLine = rec && pl ? `<br><span class="cam-place">📍 ${esc(pl.name)} · ${esc(rec.pose)}</span>` : '';
+
+  if (CAM.cat === 'compo') {
+    nameEl.textContent = c.name;
+    sayEl.innerHTML = '“' + esc(c.say) + '”' + placeLine;
+  } else if (CAM.cat === 'angle') {
+    const g = S.goal && ANGLE_GOALS.find((x) => x.id === S.goal);
+    if (g) {
+      nameEl.textContent = '각도: ' + g.name;
+      sayEl.innerHTML = `<span class="cam-chips">📐 ${esc(g.combo.height)} · ${esc(g.combo.direction)} · ${esc(g.combo.zoom)} · ${esc(g.combo.tilt)}</span><br>${esc(g.extra)}`;
+    } else {
+      nameEl.textContent = '각도: ' + c.name + ' 기준';
+      sayEl.innerHTML = `<span class="cam-chips">📐 ${esc(c.camera.height)} · 거리 ${esc(c.camera.dist)} · ${esc(c.camera.zoom)} · ${esc(c.camera.tilt)}</span><br>화살표로 원하는 효과를 골라보세요`;
+    }
+  } else if (CAM.cat === 'pose') {
+    const list = POSES[S.mode === 'duo' ? 'duo' : 'solo'];
+    const po = list[CAM.poseIdx % list.length];
+    nameEl.textContent = '포즈: ' + po.n + ` (${(CAM.poseIdx % list.length) + 1}/${list.length})`;
+    sayEl.innerHTML = esc(po.d) + placeLine;
+  } else if (CAM.cat === 'say') {
+    const lines = sayLines();
+    const it = lines[CAM.sayIdx % lines.length];
+    nameEl.textContent = '대사: ' + it.g;
+    sayEl.innerHTML = '“' + esc(it.l) + '”';
+  }
   const g = $('#camGhost');
   g.innerHTML = guideSVG(c.guide, false, true);
   g.style.display = CAM.ghost ? 'block' : 'none';
   const t = $('.cam-ghosttog'); if (t) t.textContent = CAM.ghost ? '가이드 끄기' : '가이드 켜기';
+  $$('.cam-cats [data-cat]').forEach((b) => b.classList.toggle('on', b.dataset.cat === CAM.cat));
+}
+function camPrevNext(dir) {
+  if (CAM.cat === 'compo') CAM.idx = (CAM.idx + dir + CAM.list.length) % CAM.list.length;
+  else if (CAM.cat === 'angle') {
+    const i = S.goal ? ANGLE_GOALS.findIndex((x) => x.id === S.goal) : -1;
+    S.goal = ANGLE_GOALS[(i + dir + ANGLE_GOALS.length) % ANGLE_GOALS.length].id; save();
+  } else if (CAM.cat === 'pose') {
+    const n = POSES[S.mode === 'duo' ? 'duo' : 'solo'].length;
+    CAM.poseIdx = (CAM.poseIdx + dir + n) % n;
+  } else if (CAM.cat === 'say') {
+    const n = sayLines().length;
+    CAM.sayIdx = (CAM.sayIdx + dir + n) % n;
+  }
+  camShow();
 }
 function closeCamera() {
   if (CAM.stream) { CAM.stream.getTracks().forEach((t) => t.stop()); CAM.stream = null; }
   if (CAM.hintTimer) { clearInterval(CAM.hintTimer); CAM.hintTimer = null; }
   if (CAM.motionFn) { window.removeEventListener('devicemotion', CAM.motionFn); CAM.motionFn = null; }
+  window.removeEventListener('resize', camLayout);
   const el = $('#cam'); if (el) el.remove();
   document.body.style.overflow = '';
 }
 function camShot() {
   const v = $('#camVideo');
   if (!v || !v.videoWidth) { toast('카메라가 아직 준비 중이에요'); return; }
+  // 화면의 비율 틀과 똑같은 영역을 잘라서 저장
+  const el = $('#cam');
+  const vw = v.videoWidth, vh = v.videoHeight;
+  const cw = el.clientWidth, ch = el.clientHeight;
+  const scale = Math.max(cw / vw, ch / vh);           // 화면은 꽉 채워(cover) 보이므로
+  const visW = cw / scale, visH = ch / scale;          // 화면에 실제로 보이는 원본 영역
+  const p = purposeOf(CAM.purposeId);
+  const r = p.ratio[0] / p.ratio[1];
+  let w2 = visW, h2 = visW / r;
+  if (h2 > visH) { h2 = visH; w2 = visH * r; }
+  const sx = (vw - w2) / 2, sy = (vh - h2) / 2;
   const cv = document.createElement('canvas');
-  cv.width = v.videoWidth; cv.height = v.videoHeight;
-  cv.getContext('2d').drawImage(v, 0, 0);
+  cv.width = Math.round(w2); cv.height = Math.round(h2);
+  cv.getContext('2d').drawImage(v, sx, sy, w2, h2, 0, 0, cv.width, cv.height);
   cv.toBlob((blob) => {
     const img = new Image();
     img.onload = () => {
       ED.img = img; ED.scale = 1; ED.cx = 0.5; ED.cy = 0.5; PK = null;
+      ED.purposeId = CAM.purposeId; S.lastPurpose = CAM.purposeId; save();
       markShotToday();
       // 자동으로 추억 앨범에 저장 (날짜·장소 자동 기록, 나중에 메모 추가 가능)
       shrinkBlob(img, 1400).then((small) => {
@@ -876,8 +1041,15 @@ document.addEventListener('click', (e) => {
   const a = b.dataset.cam;
   if (a === 'close') closeCamera();
   if (a === 'shot') camShot();
-  if (a === 'prev') { CAM.idx = (CAM.idx - 1 + CAM.list.length) % CAM.list.length; camShow(); }
-  if (a === 'next') { CAM.idx = (CAM.idx + 1) % CAM.list.length; camShow(); }
+  if (a === 'prev') camPrevNext(-1);
+  if (a === 'next') camPrevNext(1);
+  if (a === 'cat') { CAM.cat = b.dataset.cat; camShow(); }
+  if (a === 'ratio') {
+    const i = PURPOSES.findIndex((x) => x.id === CAM.purposeId);
+    CAM.purposeId = PURPOSES[(i + 1) % PURPOSES.length].id;
+    S.lastPurpose = CAM.purposeId; save();
+    camLayout();
+  }
   if (a === 'ghost') { CAM.ghost = !CAM.ghost; camShow(); }
   if (a === 'ai') camAI();
   if (a === 'aiclose') { const p = $('#camAi'); if (p) p.hidden = true; }
@@ -1425,6 +1597,7 @@ document.addEventListener('click', (e) => {
     return;
   }
   if (act === 'aiRetouch') { ensureAIKey((k) => runAIRetouch(k)); return; }
+  if (act === 'examGen') { const eid = id; ensureAIKey((k) => runExamGen(k, eid)); return; }
   if (act === 'aiRetouchApply') {
     if (!AI_RETOUCH_URL) return;
     const img = new Image();

@@ -1,5 +1,5 @@
 /* 홈 화면 추가 + 오프라인 실행용 최소 서비스워커 */
-const CACHE = 'jjik-v4';
+const CACHE = 'jjik-v5';
 const FILES = ['./', './index.html', './styles.css', './data.js', './app.js', './icon.svg', './manifest.webmanifest'];
 
 self.addEventListener('install', (e) => {
