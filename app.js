@@ -634,7 +634,7 @@ function runExamGen(key, id) {
   const who = c.mode === 'duo' ? 'a young Korean couple in their 20s' : 'a young Korean woman in her 20s, casual stylish outfit';
   const prompt = 'Generate ONE photorealistic vertical 4:5 photograph for a photography tutorial app. Subject: ' + who + ', photographed candidly by a partner with a smartphone. The photo must clearly DEMONSTRATE this composition technique: "' + c.name + ' — ' + c.tagline + '". Technique details: ' + c.why + ' Camera: ' + c.camera.height + ' height, ' + c.camera.zoom + '. Style: natural light, instagram aesthetic, realistic smartphone photo quality, no text, no watermark. Fictional person, not a real individual.';
   const body = JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] });
-  const models = ['gemini-2.5-flash-image', 'gemini-2.5-flash-image-preview'];
+  const models = ['gemini-3.1-flash-image', 'gemini-2.5-flash-image', 'gemini-2.5-flash-image-preview'];
   const tryModel = (i) => {
     if (i >= models.length) {
       EXAM_BUSY[id] = false;
@@ -864,7 +864,7 @@ function runAIRetouch(key) {
   const b64 = beforeUrl.split(',')[1];
   const prompt = 'Retouch this photo subtly and naturally, like a professional photo editor with a light touch: even out skin tone, remove only temporary blemishes, reduce noise, gently improve lighting. STRICT RULES: do not change face shape, eye size, body shape, hair, background content, colors of clothing, or composition. The edit must be so natural that it is unnoticeable. Return only the edited image.';
   const body = JSON.stringify({ contents: [{ parts: [{ inline_data: { mime_type: 'image/jpeg', data: b64 } }, { text: prompt }] }] });
-  const models = ['gemini-2.5-flash-image', 'gemini-2.5-flash-image-preview'];
+  const models = ['gemini-3.1-flash-image', 'gemini-2.5-flash-image', 'gemini-2.5-flash-image-preview'];
   const tryModel = (i) => {
     if (i >= models.length) {
       sheet(`<h3>✨ AI 자연 보정</h3><div class="card-s" style="margin-top:8px">지금은 연결이 안 돼요. 잠시 후 다시 시도해주세요.</div>
