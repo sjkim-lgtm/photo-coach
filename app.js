@@ -807,7 +807,8 @@ function ensureAIKey(cb) {
     지금은 <b>구글 AI 열쇠(무료 발급)</b>를 한 번 붙여넣으면 바로 써볼 수 있어요. 열쇠는 이 기기에만 저장됩니다.</div>
     <input class="timeinput" id="aiKeyIn2" type="password" placeholder="구글 AI 열쇠 붙여넣기 (AIza...)" style="margin:12px 0">
     <div class="rowbtns"><button class="btn pt" data-act="aikeySave">저장하고 계속</button></div>
-    <div class="small" style="margin-top:8px">발급: aistudio.google.com → Get API key (무료)</div>`);
+    <a class="btn ghost" style="display:block;text-decoration:none;margin-top:8px" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">🔑 무료 열쇠 발급 페이지 열기</a>
+    <div class="small" style="margin-top:8px">개인 구글 계정으로 로그인 → "API 키 만들기" → 복사해서 위에 붙여넣기. 결제 등록을 안 하면 요금이 나올 수 없어요 (하루 무료 한도만 있음).</div>`);
 }
 
 /* --- 유료(PRO) 진짜 장소 가이드: "성수 ○○카페"처럼 실제 장소의 포토스팟·유명 구도 --- */
@@ -910,7 +911,8 @@ function camAI() {
         <button class="btn pt" data-cam="aisave">저장하고 시작</button>
         <button class="btn ghost" data-cam="aiclose">닫기</button>
       </div>
-      <div class="small" style="margin-top:8px">발급: aistudio.google.com → Get API key (무료)</div>`;
+      <a class="btn ghost" style="display:block;text-decoration:none;margin-top:8px" href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">🔑 무료 열쇠 발급 페이지 열기</a>
+      <div class="small" style="margin-top:8px">개인 구글 계정으로 로그인 → "API 키 만들기" → 복사해서 위에 붙여넣기. 결제 등록을 안 하면 요금이 나올 수 없어요 (하루 무료 한도만 있음).</div>`;
     return;
   }
   runAICoach(key);
